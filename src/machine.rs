@@ -48,8 +48,10 @@ impl Machine {
         let op = self.parse_op()?;
         if debug {
             println!(
-                "[DEBUG] ip = {} | op = {op:?} | stack = {}",
-                self.ip, self.stack
+                "[DEBUG] ip = {:0>3}  |  op = {: <10} |  stack = {}",
+                self.ip,
+                format!("{:?}", op),
+                self.stack
             );
         }
 
@@ -58,6 +60,26 @@ impl Machine {
             Op::Pop => drop(self.stack.pop()?),
             Op::Echo => println!("{}", self.stack.pop()?),
             Op::Halt => self.halted = true,
+            Op::Add => {
+                let a = self.stack.pop()?;
+                let b = self.stack.pop()?;
+                self.stack.push(a + b)?;
+            }
+            Op::Sub => {
+                let a = self.stack.pop()?;
+                let b = self.stack.pop()?;
+                self.stack.push(a - b)?;
+            }
+            Op::Mul => {
+                let a = self.stack.pop()?;
+                let b = self.stack.pop()?;
+                self.stack.push(a * b)?;
+            }
+            Op::Div => {
+                let a = self.stack.pop()?;
+                let b = self.stack.pop()?;
+                self.stack.push(a / b)?;
+            }
         }
 
         Ok(())
@@ -72,6 +94,10 @@ impl Machine {
             OpCode::POP => Ok(Op::Pop),
             OpCode::ECHO => Ok(Op::Echo),
             OpCode::HALT => Ok(Op::Halt),
+            OpCode::ADD => Ok(Op::Add),
+            OpCode::SUB => Ok(Op::Sub),
+            OpCode::DIV => Ok(Op::Div),
+            OpCode::MUL => Ok(Op::Mul),
             _ => Err("unknown opcode encoutered".to_string()),
         }
     }
