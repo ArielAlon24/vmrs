@@ -1,13 +1,7 @@
-pub mod machine;
-pub mod op;
-pub mod stack;
-
-use machine::Machine;
-
 use std::env;
 use std::fs;
-
 use std::process::exit;
+use vmrs::Machine;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
