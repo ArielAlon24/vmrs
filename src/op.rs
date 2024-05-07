@@ -1,23 +1,17 @@
 pub type Word = i16;
 
+pub struct OpCode {}
+impl OpCode {
+    pub const PUSH: u8 = 0x00;
+    pub const POP: u8 = 0x01;
+    pub const ECHO: u8 = 0x02;
+    pub const HALT: u8 = 0x03;
+}
+
 #[derive(Debug)]
-pub enum OpType {
-    Push,
+pub enum Op {
+    Push(Word),
     Pop,
     Echo,
     Halt,
-}
-
-impl TryFrom<u8> for OpType {
-    type Error = String;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            0x00 => Ok(Self::Push),
-            0x01 => Ok(Self::Pop),
-            0x02 => Ok(Self::Echo),
-            0x03 => Ok(Self::Halt),
-            _ => Err("unknown OpType".to_string()),
-        }
-    }
 }

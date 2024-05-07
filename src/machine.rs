@@ -1,4 +1,4 @@
-use crate::op::{OpType, Word};
+use crate::op::{Op, OpCode, Word};
 use crate::stack::Stack;
 
 const PROGRAM_CAPACITY: usize = 1 << 10;
@@ -33,11 +33,47 @@ impl Machine {
         })
     }
 
-    pub fn execute(&mut self) -> Result<(), String> {
+    pub fn run(&mut self, debug: bool) -> Result<(), String> {
         while !self.halted {
-            self.exeucte_op()?;
+            self.exeucte(debug)?;
         }
         Ok(())
+    }
+
+    fn exeucte(&mut self, debug: bool) -> Result<(), String> {
+        if self.ip > self.program_size {
+            return Err("segmentation fault".to_string());
+        }
+
+        let op = self.parse_op()?;
+        if debug {
+            println!(
+                "[DEBUG] ip = {} | op = {op:?} | stack = {}",
+                self.ip, self.stack
+            );
+        }
+
+        match op {
+            Op::Push(word) => self.stack.push(word)?,
+            Op::Pop => drop(self.stack.pop()?),
+            Op::Echo => println!("{}", self.stack.pop()?),
+            Op::Halt => self.halted = true,
+        }
+
+        Ok(())
+    }
+
+    fn parse_op(&mut self) -> Result<Op, String> {
+        let code = self.program[self.ip];
+        self.ip += 1;
+
+        match code {
+            OpCode::PUSH => Ok(Op::Push(self.extract_word()?)),
+            OpCode::POP => Ok(Op::Pop),
+            OpCode::ECHO => Ok(Op::Echo),
+            OpCode::HALT => Ok(Op::Halt),
+            _ => Err("unknown opcode encoutered".to_string()),
+        }
     }
 
     fn extract_word(&mut self) -> Result<Word, String> {
@@ -47,26 +83,5 @@ impl Machine {
         let word = (self.program[self.ip] as Word) << 8 | self.program[self.ip + 1] as Word;
         self.ip += 2;
         Ok(word)
-    }
-
-    fn exeucte_op(&mut self) -> Result<(), String> {
-        if self.ip > self.program_size {
-            return Err("segmentation fault".to_string());
-        }
-
-        let op: OpType = self.program[self.ip].try_into()?;
-        self.ip += 1;
-
-        match op {
-            OpType::Push => {
-                let word = self.extract_word()?;
-                self.stack.push(word)?;
-            }
-            OpType::Pop => drop(self.stack.pop()?),
-            OpType::Echo => println!("{}", self.stack.pop()?),
-            OpType::Halt => self.halted = true,
-        }
-
-        Ok(())
     }
 }

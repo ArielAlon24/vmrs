@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::op::Word;
 
 const STACK_CAPACITY: usize = 1 << 10;
@@ -31,5 +33,24 @@ impl Stack {
         }
         self.index -= 1;
         Ok(self.buffer[self.index])
+    }
+}
+
+impl fmt::Display for Stack {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        if self.index == 0 {
+            write!(f, "None")
+        } else {
+            write!(
+                f,
+                "{} -> None",
+                self.buffer
+                    .iter()
+                    .map(|v| format!("{}", v))
+                    .take(self.index)
+                    .collect::<Vec<String>>()
+                    .join(" -> ")
+            )
+        }
     }
 }

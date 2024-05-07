@@ -9,7 +9,7 @@ fn main() {
 
     let mut machine = Machine::try_new(&program).expect("oops");
 
-    if let Err(error) = machine.execute() {
+    if let Err(error) = machine.run(true) {
         eprintln!("ERROR: {}", error);
     }
 }
