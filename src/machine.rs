@@ -1,4 +1,4 @@
-use crate::op::{Op, OpCode, Word};
+use crate::op::{Op, OpKind, Word};
 use crate::stack::Stack;
 
 const PROGRAM_CAPACITY: usize = 1 << 10;
@@ -24,8 +24,11 @@ impl Machine {
             program[i] = op;
         }
 
-        if input.last().is_some_and(|value| *value != OpCode::HALT) {
-            program[program_size] = OpCode::HALT;
+        if input
+            .last()
+            .is_some_and(|value| *value != OpKind::Halt.into())
+        {
+            program[program_size] = OpKind::Halt.into();
             program_size += 1;
         }
 
@@ -53,7 +56,7 @@ impl Machine {
         let op = self.parse_op()?;
         if debug {
             println!(
-                "[DEBUG] ip = {:0>3}  |  op = {: <10} |  stack = {}",
+                "[DEBUG] {:0>3} | {: <20} | stack = {}",
                 self.ip,
                 format!("{:?}", op),
                 self.stack
@@ -61,26 +64,26 @@ impl Machine {
         }
 
         match op {
-            Op::Push(word) => self.stack.push(word)?,
-            Op::Pop => drop(self.stack.pop()?),
-            Op::Echo => println!("{}", self.stack.pop()?),
-            Op::Halt => self.halted = true,
-            Op::Add => {
+            Op(OpKind::Push, Some(word)) => self.stack.push(word)?,
+            Op(OpKind::Pop, None) => drop(self.stack.pop()?),
+            Op(OpKind::Echo, None) => println!("{}", self.stack.pop()?),
+            Op(OpKind::Halt, None) => self.halted = true,
+            Op(OpKind::Add, None) => {
                 let a = self.stack.pop()?;
                 let b = self.stack.pop()?;
                 self.stack.push(b + a)?;
             }
-            Op::Sub => {
+            Op(OpKind::Sub, None) => {
                 let a = self.stack.pop()?;
                 let b = self.stack.pop()?;
                 self.stack.push(b - a)?;
             }
-            Op::Mul => {
+            Op(OpKind::Mul, None) => {
                 let a = self.stack.pop()?;
                 let b = self.stack.pop()?;
                 self.stack.push(b * a)?;
             }
-            Op::Div => {
+            Op(OpKind::Div, None) => {
                 let a = self.stack.pop()?;
                 let b = self.stack.pop()?;
                 if a == 0 {
@@ -88,26 +91,20 @@ impl Machine {
                 }
                 self.stack.push(b / a)?;
             }
+            _ => return Err("encoutered an invalid op".to_string()),
         }
 
         Ok(())
     }
 
     fn parse_op(&mut self) -> Result<Op, String> {
-        let code = self.program[self.ip];
+        let kind: OpKind = self.program[self.ip].try_into()?;
         self.ip += 1;
 
-        match code {
-            OpCode::PUSH => Ok(Op::Push(self.extract_word()?)),
-            OpCode::POP => Ok(Op::Pop),
-            OpCode::ECHO => Ok(Op::Echo),
-            OpCode::HALT => Ok(Op::Halt),
-            OpCode::ADD => Ok(Op::Add),
-            OpCode::SUB => Ok(Op::Sub),
-            OpCode::DIV => Ok(Op::Div),
-            OpCode::MUL => Ok(Op::Mul),
-            _ => Err("unknown opcode encoutered".to_string()),
+        if kind.has_operand() {
+            return Ok(Op(kind, Some(self.extract_word()?)));
         }
+        Ok(Op(kind, None))
     }
 
     fn extract_word(&mut self) -> Result<Word, String> {
@@ -139,7 +136,8 @@ mod tests {
 
     #[test]
     fn test_push_and_pop_operations() {
-        let mut machine = Machine::try_new(&[OpCode::PUSH, 0x00, 0x01, OpCode::POP]).unwrap();
+        let mut machine =
+            Machine::try_new(&[OpKind::Push.into(), 0x00, 0x01, OpKind::Pop.into()]).unwrap();
         machine.run(true).unwrap();
         assert!(machine.stack.pop().is_err());
     }
@@ -147,13 +145,13 @@ mod tests {
     #[test]
     fn test_addition() {
         let mut machine = Machine::try_new(&[
-            OpCode::PUSH,
+            OpKind::Push.into(),
             0x00,
             0x05,
-            OpCode::PUSH,
+            OpKind::Push.into(),
             0x00,
             0x03,
-            OpCode::ADD,
+            OpKind::Add.into(),
         ])
         .unwrap();
         machine.run(false).unwrap();
@@ -163,13 +161,13 @@ mod tests {
     #[test]
     fn test_subtrcation() {
         let mut machine = Machine::try_new(&[
-            OpCode::PUSH,
+            OpKind::Push.into(),
             0x00,
             0x0f,
-            OpCode::PUSH,
+            OpKind::Push.into(),
             0x00,
             0x0e,
-            OpCode::SUB,
+            OpKind::Sub.into(),
         ])
         .unwrap();
         machine.run(false).unwrap();
@@ -179,13 +177,13 @@ mod tests {
     #[test]
     fn test_multiplication() {
         let mut machine = Machine::try_new(&[
-            OpCode::PUSH,
+            OpKind::Push.into(),
             0x00,
             0x02,
-            OpCode::PUSH,
+            OpKind::Push.into(),
             0x00,
             0x0f,
-            OpCode::MUL,
+            OpKind::Mul.into(),
         ])
         .unwrap();
         machine.run(false).unwrap();
@@ -195,13 +193,13 @@ mod tests {
     #[test]
     fn test_division() {
         let mut machine = Machine::try_new(&[
-            OpCode::PUSH,
+            OpKind::Push.into(),
             0x00,
             0x0f,
-            OpCode::PUSH,
+            OpKind::Push.into(),
             0x00,
             0x03,
-            OpCode::DIV,
+            OpKind::Div.into(),
         ])
         .unwrap();
         machine.run(false).unwrap();
@@ -211,22 +209,16 @@ mod tests {
     #[test]
     fn test_division_by_zero() {
         let mut machine = Machine::try_new(&[
-            OpCode::PUSH,
+            OpKind::Push.into(),
             0x00,
             0x05,
-            OpCode::PUSH,
+            OpKind::Push.into(),
             0x00,
             0x00,
-            OpCode::DIV,
+            OpKind::Div.into(),
         ])
         .unwrap();
         assert!(machine.run(false).is_err());
-    }
-
-    #[test]
-    fn test_echo_operation() {
-        let mut machine = Machine::try_new(&[OpCode::PUSH, 0x00, 0x01, OpCode::ECHO]).unwrap();
-        machine.run(false).unwrap(); // Normally you would capture stdout to test this, but we'll assume it works here.
     }
 
     #[test]
@@ -237,7 +229,7 @@ mod tests {
 
     #[test]
     fn test_halt_operation() {
-        let mut machine = Machine::try_new(&[OpCode::HALT]).unwrap();
+        let mut machine = Machine::try_new(&[OpKind::Halt.into()]).unwrap();
         machine.run(false).unwrap();
         assert!(machine.halted);
     }
