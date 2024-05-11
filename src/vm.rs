@@ -21,7 +21,7 @@ fn main() {
 
     let mut machine = Machine::try_new(&result.unwrap()).expect("oops");
 
-    if let Err(error) = machine.run(true) {
+    if let Err(error) = machine.run(false) {
         eprintln!("ERROR: {}", error);
         exit(1);
     }

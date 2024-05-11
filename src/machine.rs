@@ -1,5 +1,6 @@
 use crate::op::{Op, OpKind, Word};
 use crate::stack::Stack;
+use std::mem::size_of;
 
 const PROGRAM_CAPACITY: usize = 1 << 10;
 
@@ -66,8 +67,7 @@ impl Machine {
         match op {
             Op(OpKind::Push, Some(word)) => self.stack.push(word)?,
             Op(OpKind::Pop, None) => drop(self.stack.pop()?),
-            Op(OpKind::Echo, None) => println!("{}", self.stack.pop()?),
-            Op(OpKind::Halt, None) => self.halted = true,
+            Op(OpKind::Echo, None) => println!("{}", self.stack.head()?),
             Op(OpKind::Add, None) => {
                 let a = self.stack.pop()?;
                 let b = self.stack.pop()?;
@@ -91,7 +91,30 @@ impl Machine {
                 }
                 self.stack.push(b / a)?;
             }
-            _ => return Err("encoutered an invalid op".to_string()),
+            Op(OpKind::Goto, Some(value)) => {
+                let address = usize::try_from(value).map_err(|_| "invalid address".to_string())?;
+                if address > self.program_size {
+                    return Err("segmentation fault".to_string());
+                }
+                self.ip = address;
+            }
+            Op(OpKind::Goif, Some(value)) => match self.stack.pop()? {
+                0 => {}
+                _ => {
+                    let address =
+                        usize::try_from(value).map_err(|_| "invalid address".to_string())?;
+                    if address > self.program_size {
+                        return Err("segmentation fault".to_string());
+                    }
+                    self.ip = address;
+                }
+            },
+            Op(OpKind::Copy, None) => {
+                let head = self.stack.head()?;
+                self.stack.push(head)?;
+            }
+            Op(OpKind::Halt, None) => self.halted = true,
+            _ => return Err("incorrect op code encountered".to_string()),
         }
 
         Ok(())
@@ -112,7 +135,7 @@ impl Machine {
             return Err(format!("could not extract word at {}", self.ip));
         }
         let word = (self.program[self.ip] as Word) << 8 | self.program[self.ip + 1] as Word;
-        self.ip += 2;
+        self.ip += size_of::<Word>();
         Ok(word)
     }
 }

@@ -1,14 +1,18 @@
+use std::collections::HashMap;
+use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::iter::Peekable;
+use std::mem::size_of;
 use std::process::exit;
 use std::str::Chars;
 use vmrs::{Op, OpKind, Word};
-
 type Bytes = Vec<u8>;
 
 struct Assembler<'a> {
     iterator: Peekable<Chars<'a>>,
+    symbol_table: HashMap<String, Word>,
+    byte: Word,
     row: usize,
     col: usize,
 }
@@ -17,32 +21,29 @@ impl<'a> Assembler<'a> {
     pub fn new(unicode: &'a str) -> Self {
         Self {
             iterator: unicode.chars().peekable(),
+            symbol_table: HashMap::new(),
+            byte: 0,
             row: 1,
             col: 0,
         }
     }
 
-    fn skip_whitespace(&mut self) {
-        while let Some(c) = self.iterator.peek() {
-            match c {
-                c if c == &'\n' => self.row += 1,
-                c if c.is_whitespace() => {}
-                _ => break,
-            }
-            self.iterator.next();
-        }
+    fn new_line(&mut self) {
+        self.row += 1;
+        self.col = 0;
+        self.iterator.next();
+    }
 
-        while self
-            .iterator
-            .peek()
-            .is_some_and(|c| c.is_whitespace() && c != &'\n')
-        {
+    fn skip_space(&mut self) {
+        while self.iterator.peek().is_some_and(is_space) {
             self.iterator.next();
+            self.col += 1;
         }
     }
 
     fn next_comment(&mut self) {
         while self.iterator.peek().is_some_and(|c| c != &'\n') {
+            self.col += 1;
             self.iterator.next();
         }
     }
@@ -50,6 +51,7 @@ impl<'a> Assembler<'a> {
     fn next_identifier(&mut self) -> String {
         let mut name = String::new();
         while self.iterator.peek().is_some_and(|c| c.is_alphabetic()) {
+            self.col += 1;
             name.push(self.iterator.next().unwrap());
         }
         name
@@ -62,6 +64,7 @@ impl<'a> Assembler<'a> {
             .peek()
             .is_some_and(|c| c.is_digit(10) || c == &'.')
         {
+            self.col += 1;
             num.push(self.iterator.next().unwrap());
         }
 
@@ -70,17 +73,53 @@ impl<'a> Assembler<'a> {
             .map_err(|_| "could not parse number".to_string())?)
     }
 
+    fn next_label(&mut self) -> Result<(), String> {
+        self.iterator.next().unwrap(); // going over '@'
+        let identifier = self.next_identifier();
+
+        if self.symbol_table.contains_key(&identifier) {
+            return Err(format!(
+                "tried to add the label: '{}' for the second time",
+                identifier
+            ));
+        }
+
+        self.symbol_table.insert(identifier, self.byte);
+        self.byte += size_of::<Word>() as i16;
+
+        Ok(())
+    }
+
     fn assemble_op(&mut self) -> Result<Op, String> {
+        let (srow, scol) = (self.row, self.col);
         let kind: OpKind = self.next_identifier().to_uppercase().try_into()?;
 
-        self.skip_whitespace();
+        self.skip_space();
 
-        let op = match kind.has_operand() {
-            true => Op(kind, Some(self.next_word()?)),
-            false => Op(kind, None),
-        };
-        println!("[DEBUG]: ({}, {}) {:?}", self.row, self.col, op);
-        self.skip_whitespace();
+        let mut operand = None;
+
+        if kind == OpKind::Goto || kind == OpKind::Goif {
+            self.skip_space();
+            let label = self.next_identifier();
+            match self.symbol_table.get(&label) {
+                None => return Err(format!("unrecognized label: '{}'", label)),
+                Some(&address) => operand = Some(address),
+            }
+            self.byte += size_of::<Word>() as i16;
+        } else if kind.has_operand() {
+            operand = Some(self.next_word()?);
+            self.byte += size_of::<Word>() as i16;
+        }
+        self.byte += 1;
+
+        let op = Op(kind, operand);
+
+        self.skip_space();
+        println!(
+            "[DEBUG] (byte: {:0>3} | row: {:0>3}, col: {:0>3}) - (row: {:0>3}, col: {:0>3}) | {:?}",
+            self.byte, srow, scol, self.row, self.col, op
+        );
+
         Ok(op)
     }
 
@@ -89,12 +128,11 @@ impl<'a> Assembler<'a> {
 
         while let Some(c) = self.iterator.peek() {
             match c {
-                c if c.is_whitespace() => self.skip_whitespace(),
-                c if c == &'|' => self.next_comment(),
-                _ => {
-                    let op = self.assemble_op()?;
-                    bytes.append(&mut op.into());
-                }
+                c if is_space(c) => self.skip_space(),
+                '|' => self.next_comment(),
+                '\n' => self.new_line(),
+                '@' => self.next_label()?,
+                _ => bytes.append(&mut self.assemble_op()?.into()),
             }
         }
 
@@ -102,8 +140,14 @@ impl<'a> Assembler<'a> {
     }
 }
 
+fn is_space(c: &char) -> bool {
+    c == &' ' || c == &'\t'
+}
+
 fn main() {
-    let mut file = File::open("test.asm").expect("could not open file");
+    let args: Vec<String> = env::args().collect();
+
+    let mut file = File::open(&args[1].as_str()).expect("could not open src");
     let mut buffer: Vec<u8> = Vec::new();
     file.read_to_end(&mut buffer).expect("empty file supplied");
     let unicode = String::from_utf8(buffer).expect("could not read unicode contents");
@@ -120,7 +164,7 @@ fn main() {
                 .write(true)
                 .create(true)
                 .open("test.o")
-                .expect("could not open out file");
+                .expect("could not open out");
             file.write(&bytes).expect("could not write to out");
         }
     }

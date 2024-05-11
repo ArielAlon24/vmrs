@@ -21,7 +21,7 @@ impl Stack {
         if self.index == 0 {
             return Err("stack underflow".to_string());
         }
-        Ok(self.buffer[self.index])
+        Ok(self.buffer[self.index - 1])
     }
 
     pub fn push(&mut self, word: Word) -> Result<(), String> {

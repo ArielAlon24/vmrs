@@ -1,14 +1,24 @@
 pub type Word = i16;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum OpKind {
+    /* Basic Stack Operations */
     Push,
     Pop,
     Echo,
+
+    /* Arithematic */
     Add,
     Sub,
     Mul,
     Div,
+
+    /* Navigation */
+    Goto,
+    Goif,
+
+    /* Other */
+    Copy,
     Halt,
 }
 
@@ -23,7 +33,10 @@ impl TryFrom<u8> for OpKind {
             0x04 => Ok(OpKind::Sub),
             0x05 => Ok(OpKind::Mul),
             0x06 => Ok(OpKind::Div),
-            0x07 => Ok(OpKind::Halt),
+            0x07 => Ok(OpKind::Goto),
+            0x08 => Ok(OpKind::Goif),
+            0x09 => Ok(OpKind::Copy),
+            0x0a => Ok(OpKind::Halt),
             _ => Err(format!("unknown binary op kind: '{}'", value)),
         }
     }
@@ -41,7 +54,11 @@ impl TryFrom<String> for OpKind {
             "SUB" => Ok(OpKind::Sub),
             "MUL" => Ok(OpKind::Mul),
             "DIV" => Ok(OpKind::Div),
+            "GOTO" => Ok(OpKind::Goto),
+            "GOIF" => Ok(OpKind::Goif),
+            "COPY" => Ok(OpKind::Copy),
             "HALT" => Ok(OpKind::Halt),
+
             _ => Err(format!("unknown string op kind: '{}'", value)),
         }
     }
@@ -57,7 +74,10 @@ impl Into<u8> for OpKind {
             OpKind::Sub => 0x04,
             OpKind::Mul => 0x05,
             OpKind::Div => 0x06,
-            OpKind::Halt => 0x07,
+            OpKind::Goto => 0x07,
+            OpKind::Goif => 0x08,
+            OpKind::Copy => 0x09,
+            OpKind::Halt => 0x0a,
         }
     }
 }
@@ -72,6 +92,9 @@ impl OpKind {
             OpKind::Sub => false,
             OpKind::Mul => false,
             OpKind::Div => false,
+            OpKind::Goto => true,
+            OpKind::Goif => true,
+            OpKind::Copy => false,
             OpKind::Halt => false,
         }
     }
