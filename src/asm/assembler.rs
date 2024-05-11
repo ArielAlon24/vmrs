@@ -1,30 +1,29 @@
 use std::collections::HashMap;
-use std::env;
-use std::fs::{File, OpenOptions};
-use std::io::{Read, Write};
 use std::iter::Peekable;
 use std::mem::size_of;
-use std::process::exit;
 use std::str::Chars;
 use vmrs::{Op, OpKind, Word};
-type Bytes = Vec<u8>;
 
-struct Assembler<'a> {
+pub type Bytes = Vec<u8>;
+
+pub struct Assembler<'a> {
     iterator: Peekable<Chars<'a>>,
-    symbol_table: HashMap<String, Word>,
+    labels: HashMap<String, Word>,
     byte: Word,
     row: usize,
     col: usize,
+    debug: bool,
 }
 
 impl<'a> Assembler<'a> {
-    pub fn new(unicode: &'a str) -> Self {
+    pub fn new(unicode: &'a str, labels: HashMap<String, Word>, debug: bool) -> Self {
         Self {
             iterator: unicode.chars().peekable(),
-            symbol_table: HashMap::new(),
+            labels,
             byte: 0,
             row: 1,
             col: 0,
+            debug,
         }
     }
 
@@ -75,18 +74,8 @@ impl<'a> Assembler<'a> {
 
     fn next_label(&mut self) -> Result<(), String> {
         self.iterator.next().unwrap(); // going over '@'
-        let identifier = self.next_identifier();
-
-        if self.symbol_table.contains_key(&identifier) {
-            return Err(format!(
-                "tried to add the label: '{}' for the second time",
-                identifier
-            ));
-        }
-
-        self.symbol_table.insert(identifier, self.byte);
+        self.next_identifier();
         self.byte += size_of::<Word>() as i16;
-
         Ok(())
     }
 
@@ -101,7 +90,7 @@ impl<'a> Assembler<'a> {
         if kind == OpKind::Goto || kind == OpKind::Goif {
             self.skip_space();
             let label = self.next_identifier();
-            match self.symbol_table.get(&label) {
+            match self.labels.get(&label) {
                 None => return Err(format!("unrecognized label: '{}'", label)),
                 Some(&address) => operand = Some(address),
             }
@@ -115,10 +104,12 @@ impl<'a> Assembler<'a> {
         let op = Op(kind, operand);
 
         self.skip_space();
-        println!(
+        if self.debug {
+            println!(
             "[DEBUG] (byte: {:0>3} | row: {:0>3}, col: {:0>3}) - (row: {:0>3}, col: {:0>3}) | {:?}",
             self.byte, srow, scol, self.row, self.col, op
         );
+        }
 
         Ok(op)
     }
@@ -142,30 +133,4 @@ impl<'a> Assembler<'a> {
 
 fn is_space(c: &char) -> bool {
     c == &' ' || c == &'\t'
-}
-
-fn main() {
-    let args: Vec<String> = env::args().collect();
-
-    let mut file = File::open(&args[1].as_str()).expect("could not open src");
-    let mut buffer: Vec<u8> = Vec::new();
-    file.read_to_end(&mut buffer).expect("empty file supplied");
-    let unicode = String::from_utf8(buffer).expect("could not read unicode contents");
-
-    let mut assembler = Assembler::new(&unicode);
-    let result = assembler.assemble();
-    match result {
-        Err(message) => {
-            eprintln!("ERROR: {}", message);
-            exit(1);
-        }
-        Ok(bytes) => {
-            let mut file = OpenOptions::new()
-                .write(true)
-                .create(true)
-                .open("test.o")
-                .expect("could not open out");
-            file.write(&bytes).expect("could not write to out");
-        }
-    }
 }

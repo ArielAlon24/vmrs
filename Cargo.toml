@@ -5,8 +5,8 @@ edition = "2021"
 
 [[bin]]
 name = "vm"
-path = "src/vm.rs"
+path = "src/vm/mod.rs"
 
 [[bin]]
 name = "asm"
-path = "src/asm.rs"
+path = "src/asm/mod.rs"

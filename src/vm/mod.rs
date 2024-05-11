@@ -3,6 +3,8 @@ use std::fs;
 use std::process::exit;
 use vmrs::Machine;
 
+const DEBUG: bool = false;
+
 fn main() {
     let args: Vec<String> = env::args().collect();
 
@@ -21,7 +23,7 @@ fn main() {
 
     let mut machine = Machine::try_new(&result.unwrap()).expect("oops");
 
-    if let Err(error) = machine.run(false) {
+    if let Err(error) = machine.run(DEBUG) {
         eprintln!("ERROR: {}", error);
         exit(1);
     }
